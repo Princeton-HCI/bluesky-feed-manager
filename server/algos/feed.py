@@ -1,6 +1,5 @@
 import os
 import json
-import asyncio
 import httpx
 import numpy as np
 import onnxruntime as ort
@@ -12,7 +11,7 @@ from atproto import Client
 CUSTOM_API_URL = os.environ.get("CUSTOM_API_URL")
 
 # --- ONNX model setup ---
-MODEL_PATH = "all-MiniLM-L6-v2.onnx"
+MODEL_PATH = os.path.join(os.path.dirname(__file__), "all-MiniLM-L6-v2.onnx")
 TOKENIZER_NAME = "sentence-transformers/all-MiniLM-L6-v2"
 
 tokenizer = AutoTokenizer.from_pretrained(TOKENIZER_NAME)
