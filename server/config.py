@@ -1,6 +1,7 @@
 import os
 import logging
 from dotenv import load_dotenv
+from server.logger import logger
 
 # Load environment variables from .env
 load_dotenv()
@@ -13,17 +14,13 @@ if not HOSTNAME:
 # DID for this service; defaults to did:web if not provided
 SERVICE_DID = os.environ.get("SERVICE_DID") or f"did:web:{HOSTNAME}"
 
-# Logging configuration
-from server.logger import logger
-DEBUG_MODE = _get_bool_env_var(os.environ.get("DEBUG_MODE"))
-if DEBUG_MODE:
-    logger.setLevel(logging.DEBUG)
-
 # Optional global flags
 def _get_bool_env_var(value: str) -> bool:
     if value is None:
         return False
     return value.strip().lower() in {"1", "true", "t", "yes", "y"}
 
-IGNORE_ARCHIVED_POSTS = _get_bool_env_var(os.environ.get("IGNORE_ARCHIVED_POSTS"))
-IGNORE_REPLY_POSTS = _get_bool_env_var(os.environ.get("IGNORE_REPLY_POSTS"))
+# Logging configuration
+SHOW_DEBUG_LOGS = _get_bool_env_var(os.environ.get("SHOW_DEBUG_LOGS"))
+if SHOW_DEBUG_LOGS:
+    logger.setLevel(logging.DEBUG)
