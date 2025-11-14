@@ -4,8 +4,11 @@ import httpx
 import numpy as np
 import onnxruntime as ort
 from transformers import AutoTokenizer
+import asyncio
+import time
+from server.models import Feed, FeedSource, FeedCache
 
-from server.models import Feed, FeedSource
+CACHE_TTL = 60  # seconds
 
 CUSTOM_API_URL = os.environ.get("CUSTOM_API_URL")
 
@@ -97,8 +100,8 @@ async def search_topics(query: str, limit: int = 2) -> list[dict]:
 
 
 def make_handler(feed_uri: str):
-    async def handler(cursor=None, limit=20):
-        # Get sources for this feed
+    async def build_feed(limit=20):
+        """Build fresh feed skeleton by fetching sources + posts."""
         sources = (
             FeedSource
             .select()
@@ -110,16 +113,55 @@ def make_handler(feed_uri: str):
 
         for src in sources:
             if src.source_type == "account":
-                account_posts = await fetch_author_posts(src.identifier, limit)
-                posts.extend(account_posts)
+                posts.extend(await fetch_author_posts(src.identifier, limit))
             elif src.source_type == "topic":
-                topic_posts = await search_topics(src.identifier, limit=limit)
-                posts.extend(topic_posts)
+                posts.extend(await search_topics(src.identifier, limit=limit))
 
-        # Sort by timestamp if available, otherwise leave as is
-        posts = posts[:limit]
-        skeleton = [{"post": p["uri"]} for p in posts]
+        # Format for Bluesky
+        feed = {"cursor": None,
+                "feed": [{"post": p["uri"]} for p in posts[:limit]]}
 
-        return {"cursor": None, "feed": skeleton}
+        # Save to SQLite
+        FeedCache.insert(
+            feed_uri=feed_uri,
+            response_json=json.dumps(feed),
+            timestamp=int(time.time())
+        ).on_conflict_replace().execute()
+
+        return feed
+
+    async def serve_from_cache(limit=20):
+        """Return cached feed if recent, otherwise None."""
+        row = FeedCache.get_or_none(FeedCache.feed_uri == feed_uri)
+        if row is None:
+            return None
+
+        age = time.time() - row.timestamp
+        if age < CACHE_TTL:
+            return json.loads(row.response_json)
+
+        return json.loads(row.response_json)  # stale but still valid
+
+    async def background_refresh(limit=20):
+        """Refresh cache in the background (non-blocking)."""
+        try:
+            await build_feed(limit)
+        except Exception as e:
+            print("Background refresh failed:", e)
+
+    async def handler(cursor=None, limit=20):
+        # 1. Try cached version first
+        cached = await serve_from_cache(limit)
+
+        if cached:
+            # 2. If cached but stale then refresh in background
+            row = FeedCache.get_or_none(FeedCache.feed_uri == feed_uri)
+            if time.time() - row.timestamp >= CACHE_TTL:
+                asyncio.create_task(background_refresh(limit))
+            return cached
+
+        # 3. If there's no cache build immediately
+        fresh = await build_feed(limit)
+        return fresh
 
     return handler

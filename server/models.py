@@ -1,4 +1,4 @@
-from peewee import Model, SqliteDatabase, TextField, ForeignKeyField
+from peewee import Model, SqliteDatabase, TextField, ForeignKeyField, IntegerField
 
 db = SqliteDatabase('feeds.db')
 
@@ -24,3 +24,11 @@ class FeedSource(Model):
         indexes = (
             (('feed', 'source_type', 'identifier'), True),
         )
+
+class FeedCache(Model):
+    feed_uri = TextField(unique=True)
+    response_json = TextField()  # JSON string of {"cursor":..., "feed":[...]}
+    timestamp = IntegerField()   # UNIX timestamp
+
+    class Meta:
+        database = db

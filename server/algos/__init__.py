@@ -1,5 +1,5 @@
 from .feed import make_handler
-from server.models import db, Feed, FeedSource
+from server.models import db, Feed, FeedSource, FeedCache
 
 # Dictionary mapping feed URI to handler
 algos = {}
@@ -8,7 +8,7 @@ algos = {}
 db.connect(reuse_if_open=True)
 
 # Ensure tables exist
-db.create_tables([Feed, FeedSource], safe=True)
+db.create_tables([Feed, FeedSource, FeedCache], safe=True)
 
 # Load all persisted feeds into algos
 for feed in Feed.select():

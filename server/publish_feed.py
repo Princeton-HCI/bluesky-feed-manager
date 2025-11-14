@@ -85,4 +85,16 @@ def create_feed(handle, password, hostname, record_name, display_name='', descri
     # Dynamically add handler to algos
     algos[feed_uri] = make_handler(feed_uri)
 
+    # Warm the cache of dynamically collected posts immediately
+    try:
+        handler = algos[feed_uri]
+        import asyncio
+
+        # Trigger handler in the background
+        asyncio.get_event_loop().create_task(handler())
+        print(f"[Cache Warm] Started background warm for {feed_uri}")
+
+    except Exception as e:
+        print(f"[Cache Warm Error] Could not warm cache for {feed_uri}: {e}")
+
     return feed_uri
