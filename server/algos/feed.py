@@ -102,7 +102,7 @@ async def search_topics(query: str, limit: int = 2) -> list[dict]:
 def make_handler(feed_uri: str):
     # Hardcoded feed for testing
     HARDCODED_FEED = {
-        "cursor": None,
+        "cursor": "1763164205598::bafyreiakbqx7jhzmhjhh463ugzpg7xtpsvwgplujbqkw65pctxelgtanqa",
         "feed": [
             {"post": "at://did:plc:wymilg6dl7apufaqxvj4nvnq/app.bsky.feed.post/3m5mjwtbku22a"},
             {"post": "at://did:plc:wymilg6dl7apufaqxvj4nvnq/app.bsky.feed.post/3m5mjvjys7c2a"},
