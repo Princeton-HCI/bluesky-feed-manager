@@ -99,10 +99,20 @@ def get_feed_skeleton():
 def create_feed_endpoint():
     data = request.json
     try:
+        # Create feed via ATProto API
         uri = create_feed(**data)
 
         # Save new feed to database
-        Feed.create(uri=uri, **data)
+        Feed.get_or_create(
+            uri=uri,
+            defaults={
+                "handle": data["handle"],
+                "record_name": data["record_name"],
+                "display_name": data.get("display_name", ""),
+                "description": data.get("description", None),
+                "avatar_path": data.get("avatar_path", None)
+            }
+        )[0]
 
         # Dynamically add handler for this new feed
         algos[uri] = make_handler(uri)
