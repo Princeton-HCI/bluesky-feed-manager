@@ -118,8 +118,8 @@ def make_handler(feed_uri: str):
 
         # Sort by timestamp if available, otherwise leave as is
         posts = posts[:limit]
-        print(posts)
+        skeleton = [{"post": p["uri"]} for p in posts]
 
-        return {"cursor": None, "feed": posts}
+        return {"cursor": None, "feed": skeleton}
 
     return handler
