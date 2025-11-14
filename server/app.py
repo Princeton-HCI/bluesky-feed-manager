@@ -103,16 +103,27 @@ def create_feed_endpoint():
         uri = create_feed(**data)
 
         # Save new feed to database
-        Feed.get_or_create(
+        feed, created = Feed.get_or_create(
             uri=uri,
             defaults={
                 "handle": data["handle"],
                 "record_name": data["record_name"],
                 "display_name": data.get("display_name", ""),
-                "description": data.get("description", None),
-                "avatar_path": data.get("avatar_path", None)
+                "description": data.get("description"),
+                "avatar_path": data.get("avatar_path")
             }
-        )[0]
+        )
+
+        if not created:
+            # Update missing fields
+            updated = False
+            for field in ["handle", "record_name", "display_name", "description", "avatar_path"]:
+                value = data.get(field)
+                if value and getattr(feed, field) != value:
+                    setattr(feed, field, value)
+                    updated = True
+            if updated:
+                feed.save()
 
         # Dynamically add handler for this new feed
         algos[uri] = make_handler(uri)
