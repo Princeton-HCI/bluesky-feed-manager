@@ -1,6 +1,6 @@
 from atproto import DidInMemoryCache, IdResolver, verify_jwt
 from atproto.exceptions import TokenInvalidSignatureError
-from flask import Request
+from fastapi import Request
 
 
 _CACHE = DidInMemoryCache()
@@ -14,17 +14,17 @@ class AuthorizationError(Exception):
     ...
 
 
-def validate_auth(request: 'Request') -> str:
+def validate_auth(request: Request) -> str:
     """Validate authorization header.
 
     Args:
         request: The request to validate.
 
     Returns:
-        :obj:`str`: Requester DID.
+        str: Requester DID.
 
     Raises:
-        :obj:`AuthorizationError`: If the authorization header is invalid.
+        AuthorizationError: If the authorization header is invalid.
     """
     auth_header = request.headers.get(_AUTHORIZATION_HEADER_NAME)
     if not auth_header:
@@ -33,7 +33,7 @@ def validate_auth(request: 'Request') -> str:
     if not auth_header.startswith(_AUTHORIZATION_HEADER_VALUE_PREFIX):
         raise AuthorizationError('Invalid authorization header')
 
-    jwt = auth_header[len(_AUTHORIZATION_HEADER_VALUE_PREFIX) :].strip()
+    jwt = auth_header[len(_AUTHORIZATION_HEADER_VALUE_PREFIX):].strip()
 
     try:
         return verify_jwt(jwt, _ID_RESOLVER.did.resolve_atproto_key).iss

@@ -15,8 +15,8 @@ SERVICE_DID = os.environ.get("SERVICE_DID") or f"did:web:{HOSTNAME}"
 
 # Logging configuration
 from server.logger import logger
-FLASK_RUN_FROM_CLI = os.environ.get("FLASK_RUN_FROM_CLI")
-if FLASK_RUN_FROM_CLI:
+DEBUG_MODE = _get_bool_env_var(os.environ.get("DEBUG_MODE"))
+if DEBUG_MODE:
     logger.setLevel(logging.DEBUG)
 
 # Optional global flags
