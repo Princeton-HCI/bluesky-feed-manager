@@ -1,6 +1,7 @@
 import sys
 import signal
 import threading
+import logging
 
 from server import config
 from server import data_stream
@@ -32,6 +33,8 @@ def sigint_handler(*_):
 
 
 signal.signal(signal.SIGINT, sigint_handler)
+
+logging.basicConfig(level=logging.INFO)
 
 
 @app.route('/')
@@ -98,9 +101,12 @@ def get_feed_skeleton():
 @app.route('/create_feed', methods=['POST'])
 def create_feed_endpoint():
     data = request.json
+    logging.info("Received /create_feed POST with data: %s", data)  # <-- log the incoming JSON
+
     try:
         # Create feed via ATProto API
         uri = create_feed(**data)
+        logging.info("Feed created with URI: %s", uri)
 
         # Save new feed to database
         print(data)
@@ -126,10 +132,14 @@ def create_feed_endpoint():
             if updated:
                 feed.save()
 
+        logging.info("Feed saved to DB: %s (created: %s)", feed.__data__, created)
+
         # Dynamically add handler for this new feed
         algos[uri] = make_handler(uri)
+        logging.info("Handler added for URI: %s", uri)
 
     except Exception as e:
+        logging.error("Error in /create_feed: %s", e, exc_info=True)
         return str(e), 400
 
     return jsonify({"uri": uri})
