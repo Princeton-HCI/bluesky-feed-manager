@@ -5,7 +5,7 @@ import numpy as np
 import onnxruntime as ort
 from transformers import AutoTokenizer
 
-from server.models import FeedSource
+from server.models import Feed, FeedSource
 from atproto import Client
 
 CUSTOM_API_URL = os.environ.get("CUSTOM_API_URL")
@@ -67,7 +67,12 @@ def make_handler(feed_uri: str):
 
     async def handler(cursor=None, limit=20):
         # Get sources for this feed
-        sources = FeedSource.select().where(FeedSource.feed_uri == feed_uri)
+        sources = (
+            FeedSource
+            .select()
+            .join(Feed)
+            .where(Feed.uri == feed_uri)
+        )
 
         posts = []
 
