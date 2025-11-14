@@ -20,6 +20,9 @@ def _get_bool_env_var(value: str) -> bool:
         return False
     return value.strip().lower() in {"1", "true", "t", "yes", "y"}
 
+IGNORE_ARCHIVED_POSTS = _get_bool_env_var(os.environ.get("IGNORE_ARCHIVED_POSTS"))
+IGNORE_REPLY_POSTS = _get_bool_env_var(os.environ.get("IGNORE_REPLY_POSTS"))
+
 # Logging configuration
 SHOW_DEBUG_LOGS = _get_bool_env_var(os.environ.get("SHOW_DEBUG_LOGS"))
 if SHOW_DEBUG_LOGS:
