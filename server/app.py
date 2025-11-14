@@ -103,6 +103,7 @@ def create_feed_endpoint():
         uri = create_feed(**data)
 
         # Save new feed to database
+        print(data)
         feed, created = Feed.get_or_create(
             uri=uri,
             defaults={
