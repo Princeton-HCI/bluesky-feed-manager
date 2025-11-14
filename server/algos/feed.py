@@ -6,7 +6,6 @@ import onnxruntime as ort
 from transformers import AutoTokenizer
 
 from server.models import Feed, FeedSource
-from atproto import Client
 
 CUSTOM_API_URL = os.environ.get("CUSTOM_API_URL")
 
@@ -36,6 +35,41 @@ async def fetch_post_by_identifier(repo: str, rkey: str) -> dict:
     return {"uri": uri, "repo": repo, "rkey": rkey}
 
 
+async def fetch_author_posts(actor_did: str, limit: int = 20) -> list[dict]:
+    """Fetch posts from a Bluesky author DID."""
+    url = (
+        "https://public.api.bsky.app/xrpc/"
+        "app.bsky.feed.getAuthorFeed"
+        f"?actor={actor_did}&limit={limit}"
+    )
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        r = await client.get(url)
+
+    if r.status_code != 200:
+        print("Author fetch failed:", r.text)
+        return []
+
+    items = r.json().get("feed", [])
+    results = []
+
+    for item in items:
+        post = item.get("post")
+        if not post:
+            continue
+        uri = post.get("uri")
+        if not uri:
+            continue
+
+        try:
+            _, _, repo, _, rkey = uri.split("/", 4)
+        except ValueError:
+            continue
+
+        results.append(await fetch_post_by_identifier(repo, rkey))
+
+    return results
+
+
 async def search_topics(query: str, limit: int = 2) -> list[dict]:
     """Use vector search to find relevant posts, returning minimal identifiers."""
     vector = encode_onnx(query).tolist()[0][0]
@@ -63,8 +97,6 @@ async def search_topics(query: str, limit: int = 2) -> list[dict]:
 
 
 def make_handler(feed_uri: str):
-    client = Client()
-
     async def handler(cursor=None, limit=20):
         # Get sources for this feed
         sources = (
@@ -78,14 +110,15 @@ def make_handler(feed_uri: str):
 
         for src in sources:
             if src.source_type == "account":
-                account_posts = await client.get_posts_by_account(src.identifier, limit=limit)
-                posts.extend([{"uri": p.uri, "repo": p.repo, "rkey": p.rkey} for p in account_posts])
+                account_posts = await fetch_author_posts(src.identifier, limit)
+                posts.extend(account_posts)
             elif src.source_type == "topic":
                 topic_posts = await search_topics(src.identifier, limit=limit)
                 posts.extend(topic_posts)
 
         # Sort by timestamp if available, otherwise leave as is
         posts = posts[:limit]
+        print(posts)
 
         return {"cursor": None, "feed": posts}
 
