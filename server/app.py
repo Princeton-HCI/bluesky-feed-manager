@@ -110,27 +110,26 @@ def create_feed_endpoint():
 
         # Save new feed to database
         print(data)
-        feed, created = Feed.get_or_create(
-            uri=uri,
-            defaults={
-                "handle": data["handle"],
-                "record_name": data["record_name"],
-                "display_name": data.get("display_name", ""),
-                "description": data.get("description"),
-                "avatar_path": data.get("avatar_path")
-            }
-        )
-
-        if not created:
-            # Update missing fields
-            updated = False
-            for field in ["handle", "record_name", "display_name", "description", "avatar_path"]:
-                value = data.get(field)
-                if value and getattr(feed, field) != value:
-                    setattr(feed, field, value)
-                    updated = True
-            if updated:
-                feed.save()
+        feed, created = Feed.get_or_none(uri=uri), False
+        if feed is None:
+            # No existing feed — create a new one
+            feed = Feed.create(
+                uri=uri,
+                handle=data["handle"],
+                record_name=data["record_name"],
+                display_name=data.get("display_name", ""),
+                description=data.get("description"),
+                avatar_path=data.get("avatar_path"),
+            )
+            created = True
+        else:
+            # Existing feed found — ensure all fields are populated
+            feed.handle = data["handle"]
+            feed.record_name = data["record_name"]
+            feed.display_name = data.get("display_name", "")
+            feed.description = data.get("description")
+            feed.avatar_path = data.get("avatar_path")
+            feed.save()
 
         logging.info("Feed saved to DB: %s (created: %s)", feed.__data__, created)
 
