@@ -1,5 +1,7 @@
 from atproto import Client, models
 from server.models import Feed
+from server.algos import algos
+from server.algos.feed import make_handler
 import os
 
 def create_feed(handle, password, hostname, record_name, display_name='', description='', avatar_path=os.path.join(os.path.dirname(__file__), "avatar.png")):
@@ -33,24 +35,31 @@ def create_feed(handle, password, hostname, record_name, display_name='', descri
     feed_uri = response.uri
 
     # Save feed to DB, update if it already exists
+    data = {
+        "handle": handle,
+        "record_name": record_name,
+        "display_name": display_name,
+        "description": description,
+        "avatar_path": avatar_path,
+    }
+
     feed, created = Feed.get_or_create(
         uri=feed_uri,
-        defaults={
-            'display_name': display_name,
-            'description': description,
-            'avatar_path': avatar_path
-        }
+        defaults=data
     )
 
     if not created:
-        feed.display_name = display_name
-        feed.description = description
-        feed.avatar_path = avatar_path
-        feed.save()
+        # Update missing fields
+        updated = False
+        for field in ["handle", "record_name", "display_name", "description", "avatar_path"]:
+            value = data.get(field)
+            if value and getattr(feed, field) != value:
+                setattr(feed, field, value)
+                updated = True
+        if updated:
+            feed.save()
 
     # Dynamically add handler to algos
-    from server.algos import algos
-    from server.algos.feed import make_handler
     algos[feed_uri] = make_handler(feed_uri)
 
     return feed_uri

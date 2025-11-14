@@ -101,41 +101,14 @@ def get_feed_skeleton():
 @app.route('/create_feed', methods=['POST'])
 def create_feed_endpoint():
     data = request.json
-    logging.info("Received /create_feed POST with data: %s", data)  # <-- log the incoming JSON
 
     try:
         # Create feed via ATProto API
         uri = create_feed(**data)
-        logging.info("Feed created with URI: %s", uri)
-
-        # Save new feed to database
-        print(data)
-        feed, created = Feed.get_or_none(uri=uri), False
-        if feed is None:
-            # No existing feed — create a new one
-            feed = Feed.create(
-                uri=uri,
-                handle=data["handle"],
-                record_name=data["record_name"],
-                display_name=data.get("display_name", ""),
-                description=data.get("description"),
-                avatar_path=data.get("avatar_path"),
-            )
-            created = True
-        else:
-            # Existing feed found — ensure all fields are populated
-            feed.handle = data["handle"]
-            feed.record_name = data["record_name"]
-            feed.display_name = data.get("display_name", "")
-            feed.description = data.get("description")
-            feed.avatar_path = data.get("avatar_path")
-            feed.save()
-
-        logging.info("Feed saved to DB: %s (created: %s)", feed.__data__, created)
 
         # Dynamically add handler for this new feed
         algos[uri] = make_handler(uri)
-        logging.info("Handler added for URI: %s", uri)
+        logging.info("Feed and handler added for URI: %s", uri)
 
     except Exception as e:
         logging.error("Error in /create_feed: %s", e, exc_info=True)
