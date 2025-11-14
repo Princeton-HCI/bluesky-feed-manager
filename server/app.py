@@ -74,7 +74,7 @@ def describe_feed_generator():
 
 
 @app.route('/xrpc/app.bsky.feed.getFeedSkeleton', methods=['GET'])
-def get_feed_skeleton():
+async def get_feed_skeleton():
     feed = request.args.get('feed', default=None, type=str)
     algo = algos.get(feed)
     if not algo:
@@ -92,7 +92,7 @@ def get_feed_skeleton():
     try:
         cursor = request.args.get('cursor', default=None, type=str)
         limit = request.args.get('limit', default=20, type=int)
-        body = algo(cursor, limit)
+        body = await algo(cursor, limit)
     except ValueError:
         return 'Malformed cursor', 400
 
