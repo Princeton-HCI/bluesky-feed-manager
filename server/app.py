@@ -98,7 +98,7 @@ def get_feed_skeleton():
 
     return jsonify(body)
 
-@app.route('/create_feed', methods=['POST'])
+@app.route('/manage-feed', methods=['POST'])
 def create_feed_endpoint():
     data = request.json
 
@@ -111,7 +111,7 @@ def create_feed_endpoint():
         logging.info("Feed and handler added for URI: %s", uri)
 
     except Exception as e:
-        logging.error("Error in /create_feed: %s", e, exc_info=True)
+        logging.error("Error in /manage-feed: %s", e, exc_info=True)
         return str(e), 400
 
     return jsonify({"uri": uri})

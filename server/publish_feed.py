@@ -1,10 +1,12 @@
 from atproto import Client, models
-from server.models import Feed
+from server.models import Feed, FeedSource
 from server.algos import algos
 from server.algos.feed import make_handler
 import os
 
-def create_feed(handle, password, hostname, record_name, display_name='', description='', avatar_path=os.path.join(os.path.dirname(__file__), "avatar.png")):
+def create_feed(handle, password, hostname, record_name, display_name='', description='',
+                avatar_path=os.path.join(os.path.dirname(__file__), "avatar.png"),
+                feed_blueprint=None):
     client = Client()
     client.login(handle, password)
 
@@ -58,6 +60,27 @@ def create_feed(handle, password, hostname, record_name, display_name='', descri
                 updated = True
         if updated:
             feed.save()
+
+    # Feed blueprint processing
+    if feed_blueprint:
+        # Delete old sources for this feed
+        FeedSource.delete().where(FeedSource.feed == feed).execute()
+
+        # Add suggested accounts
+        for account_did in feed_blueprint['ruleset'].get('suggested_accounts', []):
+            FeedSource.create(
+                feed=feed,
+                source_type='account',
+                identifier=account_did
+            )
+
+        # Add topics
+        for topic in feed_blueprint['ruleset'].get('topics', []):
+            FeedSource.create(
+                feed=feed,
+                source_type='topic',
+                identifier=topic['name']
+            )
 
     # Dynamically add handler to algos
     algos[feed_uri] = make_handler(feed_uri)

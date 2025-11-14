@@ -1,4 +1,4 @@
-from peewee import Model, SqliteDatabase, TextField
+from peewee import Model, SqliteDatabase, TextField, ForeignKeyField
 
 db = SqliteDatabase('feeds.db')
 
@@ -13,6 +13,14 @@ class Feed(Model):
     class Meta:
         database = db
 
-# create the table if it doesn't exist
-db.connect()
-db.create_tables([Feed], safe=True)
+
+class FeedSource(Model):
+    feed = ForeignKeyField(Feed, backref='sources', on_delete='CASCADE')
+    source_type = TextField()   # 'account' or 'topic'
+    identifier = TextField()    # e.g., 'did:web:example.com' or 'sports'
+
+    class Meta:
+        database = db
+        indexes = (
+            (('feed', 'source_type', 'identifier'), True),
+        )
