@@ -177,6 +177,69 @@ http://feeds.princetonhci.social/xrpc/app.bsky.feed.getFeedSkeleton?feed=<feed_u
 
 ## 10. Optional: Automated Waitress Script
 
+- `run_waitress.sh`:
+
+```bash
+#!/bin/bash
+
+SCRIPT="server.app:app"
+PID_FILE="feedgen.pid"
+LOG_FILE="feedgen.log"
+
+set -a
+source .env
+set +a
+
+start() {
+  if [ -f "$PID_FILE" ] && kill -0 $(cat "$PID_FILE") 2>/dev/null; then
+    echo "Feed generator is already running with PID $(cat "$PID_FILE")"
+    exit 1
+  fi
+
+  nohup waitress-serve --listen=127.0.0.1:8000 "$SCRIPT" > "$LOG_FILE" 2>&1 &
+  echo $! > "$PID_FILE"
+  echo "Started feed generator with PID $(cat "$PID_FILE")"
+}
+
+stop() {
+  if [ ! -f "$PID_FILE" ]; then
+    echo "No PID file found"
+    exit 1
+  fi
+
+  PID=$(cat "$PID_FILE")
+  if kill -0 "$PID" 2>/dev/null; then
+    kill "$PID"
+    echo "Stopped feed generator (PID $PID)"
+    rm "$PID_FILE"
+  else
+    echo "Process $PID not running"
+    rm "$PID_FILE"
+  fi
+}
+
+status() {
+  if [ -f "$PID_FILE" ] && kill -0 $(cat "$PID_FILE") 2>/dev/null; then
+    echo "Feed generator is running with PID $(cat "$PID_FILE")"
+  else
+    echo "Feed generator is not running"
+  fi
+}
+
+case "$1" in
+  start) start ;;
+  stop) stop ;;
+  status) status ;;
+  *) echo "Usage: $0 {start|stop|status}" ;;
+esac
+```
+
+- Make executable:
+
+```bash
+chmod +x run_waitress.sh
+```
+
 - `run_waitress.sh` allows easy start/stop/status management:
 
 ```bash
