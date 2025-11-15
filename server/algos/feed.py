@@ -100,28 +100,68 @@ async def search_topics(query: str, limit: int = 2) -> list[dict]:
 
 
 def make_handler(feed_uri: str):
-    # Hardcoded feed for testing
-    HARDCODED_FEED = {
-        "cursor": "",
-        "feed": [
-            {"post": "at://did:plc:wymilg6dl7apufaqxvj4nvnq/app.bsky.feed.post/3m5mjwtbku22a"},
-            {"post": "at://did:plc:wymilg6dl7apufaqxvj4nvnq/app.bsky.feed.post/3m5mjvjys7c2a"},
-            {"post": "at://did:plc:kqwgubh6vutpu3cli2gll6at/app.bsky.feed.post/3m5ml2t3d3s22"},
-            {"post": "at://did:plc:3cj63bm5lp7vtshcmi64jcu6/app.bsky.feed.post/3m5mkn4mirc2m"},
-            {"post": "at://did:plc:3cj63bm5lp7vtshcmi64jcu6/app.bsky.feed.post/3m5mklfrrfk2m"},
-            {"post": "at://did:plc:3cj63bm5lp7vtshcmi64jcu6/app.bsky.feed.post/3m5mkgl7g722m"},
-            {"post": "at://did:plc:3cj63bm5lp7vtshcmi64jcu6/app.bsky.feed.post/3m5mk5fzuac2m"},
-            {"post": "at://did:plc:bnr7lud6lkmvebxcdumuw7hd/app.bsky.feed.post/3m5mhvuodkc2e"},
-            {"post": "at://did:plc:7rtxsl6akfz3a62jqrqb5ryd/app.bsky.feed.post/3m5lu5tbe4k2u"},
-            {"post": "at://did:plc:oe5k5kgdudinkw6jpzzfcw4q/app.bsky.feed.post/3m5mhdtvpak2u"},
-            # … you can include all the rest from your JSON
-        ]
-    }
+    async def build_feed(limit=20):
+        """Build fresh feed skeleton by fetching sources + posts."""
+        sources = (
+            FeedSource
+            .select()
+            .join(Feed)
+            .where(Feed.uri == feed_uri)
+        )
+
+        posts = []
+
+        for src in sources:
+            if src.source_type == "account":
+                posts.extend(await fetch_author_posts(src.identifier, limit))
+            elif src.source_type == "topic":
+                posts.extend(await search_topics(src.identifier, limit=limit))
+
+        # Format for Bluesky
+        feed = {"cursor": "",
+                "feed": [{"post": p["uri"]} for p in posts[:limit]]}
+
+        # Save to SQLite
+        FeedCache.insert(
+            feed_uri=feed_uri,
+            response_json=json.dumps(feed),
+            timestamp=int(time.time())
+        ).on_conflict_replace().execute()
+
+        return feed
+
+    async def serve_from_cache(limit=20):
+        """Return cached feed if recent, otherwise None."""
+        row = FeedCache.get_or_none(FeedCache.feed_uri == feed_uri)
+        if row is None:
+            return None
+
+        age = time.time() - row.timestamp
+        if age < CACHE_TTL:
+            return json.loads(row.response_json)
+
+        return json.loads(row.response_json)  # stale but still valid
+
+    async def background_refresh(limit=20):
+        """Refresh cache in the background (non-blocking)."""
+        try:
+            await build_feed(limit)
+        except Exception as e:
+            print("Background refresh failed:", e)
 
     async def handler(cursor=None, limit=20):
-        # Always return the hardcoded feed (optionally slice to `limit`)
-        feed = HARDCODED_FEED.copy()
-        feed["feed"] = feed["feed"][:limit]
-        return feed
+        # 1. Try cached version first
+        cached = await serve_from_cache(limit)
+
+        if cached:
+            # 2. If cached but stale then refresh in background
+            row = FeedCache.get_or_none(FeedCache.feed_uri == feed_uri)
+            if time.time() - row.timestamp >= CACHE_TTL:
+                asyncio.create_task(background_refresh(limit))
+            return cached
+
+        # 3. If there's no cache build immediately
+        fresh = await build_feed(limit)
+        return fresh
 
     return handler
