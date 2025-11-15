@@ -118,7 +118,7 @@ def make_handler(feed_uri: str):
                 posts.extend(await search_topics(src.identifier, limit=limit))
 
         # Format for Bluesky
-        feed = {"cursor": "1763164205598::bafyreiakbqx7jhzmhjhh463ugzpg7xtpsvwgplujbqkw65pctxelgtanqa",
+        feed = {"cursor": str(int(time.time())),
                 "feed": [{"post": p["uri"]} for p in posts[:limit]]}
 
         # Save to SQLite
