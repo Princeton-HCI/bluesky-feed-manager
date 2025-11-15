@@ -38,7 +38,7 @@ async def fetch_post_by_identifier(repo: str, rkey: str) -> dict:
     return {"uri": uri, "repo": repo, "rkey": rkey}
 
 
-async def fetch_author_posts(actor_did: str, limit: int = 50) -> list[dict]:
+async def fetch_author_posts(actor_did: str, limit: int = 10) -> list[dict]:
     """Fetch posts from a Bluesky author DID."""
     url = (
         "https://public.api.bsky.app/xrpc/"
@@ -73,7 +73,7 @@ async def fetch_author_posts(actor_did: str, limit: int = 50) -> list[dict]:
     return results
 
 
-async def search_topics(query: str, limit: int = 50) -> list[dict]:
+async def search_topics(query: str, limit: int = 10) -> list[dict]:
     """Use vector search to find relevant posts, returning minimal identifiers."""
     vector = encode_onnx(query).tolist()[0][0]
     body = json.dumps(vector)
@@ -100,7 +100,7 @@ async def search_topics(query: str, limit: int = 50) -> list[dict]:
 
 
 def make_handler(feed_uri: str):
-    async def build_feed(limit=50):
+    async def build_feed(limit=10):
         """Build fresh feed skeleton by fetching sources + posts."""
         sources = (
             FeedSource
@@ -130,7 +130,7 @@ def make_handler(feed_uri: str):
 
         return feed
 
-    async def serve_from_cache(limit=50):
+    async def serve_from_cache(limit=10):
         """Return cached feed if recent, otherwise None."""
         row = FeedCache.get_or_none(FeedCache.feed_uri == feed_uri)
         if row is None:
@@ -142,14 +142,14 @@ def make_handler(feed_uri: str):
 
         return json.loads(row.response_json)  # stale but still valid
 
-    async def background_refresh(limit=50):
+    async def background_refresh(limit=10):
         """Refresh cache in the background (non-blocking)."""
         try:
             await build_feed(limit)
         except Exception as e:
             print("Background refresh failed:", e)
 
-    async def handler(cursor="", limit=50):
+    async def handler(cursor="", limit=10):
         # 1. Try cached version first
         cached = await serve_from_cache(limit)
 
