@@ -12,7 +12,7 @@ CACHE_TTL = 60  # seconds
 
 CUSTOM_API_URL = os.environ.get("CUSTOM_API_URL")
 
-# --- ONNX model setup ---
+# ONNX model setup
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "all-MiniLM-L6-v2.onnx")
 TOKENIZER_NAME = "sentence-transformers/all-MiniLM-L6-v2"
 
@@ -36,6 +36,23 @@ async def fetch_post_by_identifier(repo: str, rkey: str) -> dict:
     """Return minimal post info (just enough to build a URI)."""
     uri = f"at://{repo}/app.bsky.feed.post/{rkey}"
     return {"uri": uri, "repo": repo, "rkey": rkey}
+
+
+async def fetch_full_post(uri: str) -> dict:
+    """Fetch full post JSON so keyword filters can work."""
+    url = (
+        "https://public.api.bsky.app/xrpc/"
+        "app.bsky.feed.getPosts"
+        f"?uris={uri}"
+    )
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        r = await client.get(url)
+
+    if r.status_code != 200:
+        return {}
+
+    posts = r.json().get("posts", [])
+    return posts[0] if posts else {}
 
 
 async def fetch_author_posts(actor_did: str, limit: int = 10) -> list[dict]:
@@ -62,7 +79,6 @@ async def fetch_author_posts(actor_did: str, limit: int = 10) -> list[dict]:
         uri = post.get("uri")
         if not uri:
             continue
-
         try:
             _, _, repo, _, rkey = uri.split("/", 4)
         except ValueError:
@@ -99,6 +115,43 @@ async def search_topics(query: str, limit: int = 10) -> list[dict]:
     return results
 
 
+# Filtering logic (blacklist plcs + keywords)
+def extract_filters(feed_uri: str):
+    """Return sets for quick filtering."""
+    rows = (
+        FeedSource
+        .select()
+        .where(FeedSource.feed == Feed.get(Feed.uri == feed_uri))
+    )
+    blocked_dids = set()
+    banned_keywords = set()
+    for r in rows:
+        if r.source_type == "account_filter":
+            blocked_dids.add(r.identifier)
+        if r.source_type == "topic_filter":
+            banned_keywords.add(r.identifier.lower())
+
+    return blocked_dids, banned_keywords
+
+def should_block_post(full_post: dict, blocked_dids: set, banned_keywords: set) -> bool:
+    """Return True if post should be filtered out."""
+    # Block authors
+    author = full_post.get("author")
+    if author:
+        if author.get("did") in blocked_dids:
+            return True
+    # Block keyword-containing posts
+    record = full_post.get("record", {})
+    text = record.get("text", "").lower()
+
+    for kw in banned_keywords:
+        if kw in text:
+            return True
+
+    return False
+
+
+# Feed handler factory
 def make_handler(feed_uri: str):
     async def build_feed(limit=10):
         """Build fresh feed skeleton by fetching sources + posts."""
@@ -109,17 +162,50 @@ def make_handler(feed_uri: str):
             .where(Feed.uri == feed_uri)
         )
 
-        posts = []
+        # Load blacklist rules
+        blocked_dids, banned_keywords = extract_filters(feed_uri)
+
+        collected = []
 
         for src in sources:
-            if src.source_type == "account":
-                posts.extend(await fetch_author_posts(src.identifier, limit))
-            elif src.source_type == "topic":
-                posts.extend(await search_topics(src.identifier, limit=limit))
+            # Preferences
+            if src.source_type == "account_preference":
+                collected.extend(await fetch_author_posts(src.identifier, limit))
+
+            elif src.source_type == "topic_preference":
+                collected.extend(await search_topics(src.identifier, limit=limit))
+
+            # Filters NOT fetched here — they are applied to results below.
+
+        # Deduplicate
+        seen = set()
+        filtered_posts = []
+
+        # Apply filters
+        for p in collected:
+            uri = p["uri"]
+            if uri in seen:
+                continue
+            seen.add(uri)
+
+            full_post = await fetch_full_post(uri)
+            if not full_post:
+                continue
+
+            # apply filters
+            if should_block_post(full_post, blocked_dids, banned_keywords):
+                continue
+
+            filtered_posts.append(p)
+
+            if len(filtered_posts) >= limit:
+                break
 
         # Format for Bluesky
-        feed = {"cursor": str(int(time.time())),
-                "feed": [{"post": p["uri"]} for p in posts[:limit]]}
+        feed = {
+            "cursor": str(int(time.time())),
+            "feed": [{"post": p["uri"]} for p in filtered_posts[:limit]]
+        }
 
         # Save to SQLite
         FeedCache.insert(
@@ -150,17 +236,17 @@ def make_handler(feed_uri: str):
             print("Background refresh failed:", e)
 
     async def handler(cursor="", limit=10):
-        # 1. Try cached version first
+        # Try cached version first
         cached = await serve_from_cache(limit)
 
         if cached:
-            # 2. If cached but stale then refresh in background
+            # If cached but stale then refresh in background
             row = FeedCache.get_or_none(FeedCache.feed_uri == feed_uri)
             if time.time() - row.timestamp >= CACHE_TTL:
                 asyncio.create_task(background_refresh(limit))
             return cached
 
-        # 3. If there's no cache build immediately
+        # If there's no cache build immediately
         fresh = await build_feed(limit)
         return fresh
 

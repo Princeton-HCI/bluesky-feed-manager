@@ -16,8 +16,8 @@ class Feed(Model):
 
 class FeedSource(Model):
     feed = ForeignKeyField(Feed, backref='sources', on_delete='CASCADE')
-    source_type = TextField()   # 'account' or 'topic'
-    identifier = TextField()    # e.g., 'did:web:example.com' or 'sports'
+    source_type = TextField()   # 'account_preference', 'topic_preference', 'account_filter', 'topic_filter'
+    identifier = TextField()    # e.g., 'did:plc:example.bsky.social' or 'sports'
 
     class Meta:
         database = db

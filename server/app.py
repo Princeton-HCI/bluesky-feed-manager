@@ -2,6 +2,7 @@ import sys
 import signal
 import threading
 import logging
+import os
 
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse
@@ -10,12 +11,13 @@ from server import config, data_stream
 from server.algos import algos
 from server.algos.feed import make_handler
 from server.data_filter import operations_callback
-from server.publish_feed import create_feed
+from server.create_feed import create_feed
 from server.models import Feed
 
 
 # App setup
 app = FastAPI()
+API_KEY = os.getenv("API_KEY")
 logging.basicConfig(level=logging.INFO)
 
 stream_stop_event = threading.Event()
@@ -90,7 +92,11 @@ async def get_feed_skeleton(feed: str, cursor: str = None, limit: int = 20):
     return body
 
 @app.post("/manage-feed")
-async def create_feed_endpoint(data: dict):
+async def create_feed_endpoint(request: Request, data: dict):
+    key = request.headers.get("x-api-key")
+    if key != API_KEY:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+    
     try:
         # Create feed via ATProto API
         uri = create_feed(**data)

@@ -1,8 +1,8 @@
 #!/bin/bash
 
 SCRIPT="server.app:app"
-PID_FILE="uvicorn.pid"
-LOG_FILE="uvicorn.log"
+PID_FILE="server.pid"
+LOG_FILE="server.log"
 
 set -a
 source .env
@@ -13,37 +13,37 @@ PORT="${PORT:-8000}"
 
 start() {
   if [ -f "$PID_FILE" ] && kill -0 $(cat "$PID_FILE") 2>/dev/null; then
-    echo "Uvicorn is already running with PID $(cat "$PID_FILE")"
+    echo "Bluesky Feed Manager service is already running (PID $(cat "$PID_FILE"))"
     exit 1
   fi
 
   nohup uvicorn "$SCRIPT" --host "$HOST" --port "$PORT" --reload > "$LOG_FILE" 2>&1 &
   echo $! > "$PID_FILE"
-  echo "Started Uvicorn ($SCRIPT) with PID $(cat "$PID_FILE"). Logs: $LOG_FILE"
+  echo "Started Bluesky Feed Manager service (PID $(cat "$PID_FILE")). Logs: $LOG_FILE"
 }
 
 stop() {
   if [ ! -f "$PID_FILE" ]; then
-    echo "No PID file found for Uvicorn"
+    echo "No PID file found for Bluesky Feed Manager service"
     exit 1
   fi
 
   PID=$(cat "$PID_FILE")
   if kill -0 "$PID" 2>/dev/null; then
     kill "$PID"
-    echo "Stopped Uvicorn (PID $PID)"
+    echo "Stopped Bluesky Feed Manager service (PID $PID)"
     rm "$PID_FILE"
   else
-    echo "Process $PID not running"
+    echo "Bluesky Feed Manager service (PID $PID) is not running"
     rm "$PID_FILE"
   fi
 }
 
 status() {
   if [ -f "$PID_FILE" ] && kill -0 $(cat "$PID_FILE") 2>/dev/null; then
-    echo "Uvicorn is running with PID $(cat "$PID_FILE")"
+    echo "Bluesky Feed Manager service is running (PID $(cat "$PID_FILE"))"
   else
-    echo "Uvicorn is not running"
+    echo "Bluesky Feed Manager service is not running"
   fi
 }
 

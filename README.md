@@ -6,7 +6,7 @@ This guide walks through deploying your ATProto feed generator on a VM with NGIN
 
 ## 1. VM & Network Setup
 
-1. **Create VM**
+1. **Create VM** (Ubuntu 22+ recommended)
 2. **Assign a new external IP**
 3. **Point your feeds subdomain** to the VM’s external IP
 
@@ -20,86 +20,96 @@ SSH into your VM and run:
 
 ```bash
 sudo apt update
-sudo pip install --upgrade --force-reinstall --ignore-installed \
-    python-dotenv atproto peewee Flask typing-extensions --break-system-packages
+sudo apt install nginx certbot python3-certbot-nginx -y
+sudo pip3 install --upgrade --force-reinstall --ignore-installed \
+    python-dotenv \
+    atproto \
+    peewee \
+    typing-extensions \
+    numpy \
+    onnxruntime \
+    transformers \
+    fastapi \
+    uvicorn \
+    --break-system-packages
 ```
 
 ---
 
-## 3. Configure Environment
+## 3. Pull Down the GitHub Repository
 
-1. Copy `.env` example:
+Clone this repo into the VM and enter the project directory:
+
+```bash
+git clone https://github.com/Princeton-HCI/bluesky-feed-manager.git
+cd bluesky-feed-manager
+```
+
+---
+
+## 4. Configure Environment Variables
+
+1. Copy the example environment file:
 
 ```bash
 cp .env.example .env
 nano .env
 ```
 
-2. Configure key variables:
+2. Set the required variables. Common ones include:
 
-- `FEED_URI` – Set after first publish if using `did:web`.
-- Display info: `FEED_NAME`, `FEED_DESCRIPTION`, `FEED_AVATAR`.
-- Any other credentials, database settings, or API keys.
+- `HOSTNAME` - Replace `'feed.example.com'` with the actual subdomain you pointed to your VM (e.g., `feeds.princetonhci.social`).
+- `CUSTOM_API_URL` - Keep as-is if you're using your existing PDS; otherwise change to the URL of your own API instance.
+- `API_KEY` - A secure key you define. Clients must include this key in requests to access the APIs provided by this service.
+- Any optional variables your project requires
 
----
-
-## 4. Implement Filtering & Feed Logic
-
-- Edit `server/data_filter.py` to define which posts to include/exclude.
-- Optionally, add custom feed algorithms in `server/algos/`.
-
-Example:
-
-```python
-# server/data_filter.py
-def filter_post(post):
-    return post.author in ALLOWED_AUTHORS
-```
+Save and exit when done.
 
 ---
 
-## 5. Publish Your Feed
+## 5. Run the Server
+
+Here is a clean rewritten **Step 5** based on your instructions:
+
+---
+
+## 5. Run the Server
+
+First, make the server script executable:
 
 ```bash
-python publish_feed.py
+chmod +x run_server.sh
 ```
 
-- The script creates the feed in ATProto, uploads the avatar if provided, and stores it in SQLite.
-- The feed is immediately available to the server and dynamically registered in `algos`.
-- Example verification:
+Then start the Bluesky Feed Manager service:
 
-```text
-http://feeds.princetonhci.social:8000/xrpc/app.bsky.feed.describeFeedGenerator
-http://feeds.princetonhci.social:8000/xrpc/app.bsky.feed.getFeedSkeleton?feed=<feed_uri>
+```bash
+./run_server.sh start
+```
+
+To check whether it's running:
+
+```bash
+./run_server.sh status
+```
+
+To stop it:
+
+```bash
+./run_server.sh stop
+```
+
+### **Optional: Run in the foreground to view logs directly**
+
+If you prefer to run the server without backgrounding it (useful for debugging and watching logs live), run Uvicorn manually:
+
+```bash
+uvicorn server.app:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 ---
 
-## 6. Run the Server
-
-1. **Development server:**
-
-```bash
-flask --debug run
-```
-
-2. **Production server with Waitress:**
-
-```bash
-waitress-serve --listen=0.0.0.0:8000 server.app:app
-```
-
-- Optional: create a helper shell script (`run_waitress.sh`) for start/stop/status management (see your script above).
-
----
-
-## 7. Configure NGINX & SSL
-
-1. Install NGINX and Certbot:
-
-```bash
-sudo apt install nginx certbot python3-certbot-nginx -y
-```
+## 6. Configure NGINX & SSL
 
 2. Create NGINX site configuration:
 
@@ -151,163 +161,154 @@ sudo certbot --nginx -d feeds.princetonhci.social
 
 ---
 
-## 8. Verify Feeds
-
-- List all registered feeds:
-
-```text
-http://feeds.princetonhci.social/xrpc/app.bsky.feed.describeFeedGenerator
-```
-
-- Retrieve feed skeleton (paginated):
-
-```text
-http://feeds.princetonhci.social/xrpc/app.bsky.feed.getFeedSkeleton?feed=<feed_uri>&limit=20
-```
+Below is a clean, rewritten **Step 7** that replaces your original Step 11.
+It focuses on **trying the service**, **deploying a new custom feed**, and includes the **updated request body shape**.
 
 ---
 
-## 9. Dynamic Updates
+# **7. Test the Service: Deploy a New Custom Feed (Dynamic Feed Creation)**
 
-- **New feeds** can be created without restarting the server.
-- **Existing feeds** can be updated by re-running `publish_feed.py` with new display info or avatar.
-- Handlers are dynamically added to `algos` using `make_handler(feed_uri)`.
+Once your server is running and NGINX/SSL is configured, you can **create new custom feeds dynamically**—without editing code or restarting the service.
 
----
-
-## 10. Optional: Automated Waitress Script
-
-- `run_waitress.sh`:
-
-```bash
-#!/bin/bash
-
-SCRIPT="server.app:app"
-PID_FILE="feedgen.pid"
-LOG_FILE="feedgen.log"
-
-set -a
-source .env
-set +a
-
-start() {
-  if [ -f "$PID_FILE" ] && kill -0 $(cat "$PID_FILE") 2>/dev/null; then
-    echo "Feed generator is already running with PID $(cat "$PID_FILE")"
-    exit 1
-  fi
-
-  nohup waitress-serve --listen=127.0.0.1:8000 "$SCRIPT" > "$LOG_FILE" 2>&1 &
-  echo $! > "$PID_FILE"
-  echo "Started feed generator with PID $(cat "$PID_FILE")"
-}
-
-stop() {
-  if [ ! -f "$PID_FILE" ]; then
-    echo "No PID file found"
-    exit 1
-  fi
-
-  PID=$(cat "$PID_FILE")
-  if kill -0 "$PID" 2>/dev/null; then
-    kill "$PID"
-    echo "Stopped feed generator (PID $PID)"
-    rm "$PID_FILE"
-  else
-    echo "Process $PID not running"
-    rm "$PID_FILE"
-  fi
-}
-
-status() {
-  if [ -f "$PID_FILE" ] && kill -0 $(cat "$PID_FILE") 2>/dev/null; then
-    echo "Feed generator is running with PID $(cat "$PID_FILE")"
-  else
-    echo "Feed generator is not running"
-  fi
-}
-
-case "$1" in
-  start) start ;;
-  stop) stop ;;
-  status) status ;;
-  *) echo "Usage: $0 {start|stop|status}" ;;
-esac
-```
-
-- Make executable:
-
-```bash
-chmod +x run_waitress.sh
-```
-
-- `run_waitress.sh` allows easy start/stop/status management:
-
-```bash
-./run_waitress.sh start
-./run_waitress.sh stop
-./run_waitress.sh status
-```
+This step confirms that your deployment works end-to-end.
 
 ---
 
-## 11. Dynamic Feed Creation via API
-
-You can now **create feeds dynamically** without touching the server code or restarting it.
-
-### Endpoint
+## **Endpoint**
 
 ```
 POST /create_feed
 Content-Type: application/json
 ```
 
-### Request JSON Example
+Your Feed Manager will automatically:
+
+1. Authenticate with the ATProto account you provide
+2. Publish a new feed generator record
+3. Store the feed in SQLite
+4. Register it dynamically so it’s instantly live
+5. Serve the feed from your hostname (e.g., `https://feeds.princetonhci.social`)
+
+---
+
+## **Updated Request Shape**
+
+Here is the **new full JSON structure** your API expects, including the `ruleset_id`, `blueprint`, and feed-specific metadata:
 
 ```json
 {
-  "handle": "princetonhci.social",
-  "password": "<example password>",
+  "handle": "<your bluesky handle>",
+  "password": "<the app password for the said handle>",
   "hostname": "feeds.princetonhci.social",
-  "record_name": "demo-custom-feed",
-  "display_name": "Demo Custom Feed",
-  "description": "An example of a custom feed"
+  "record_name": "adorable-pets-feed",
+  "display_name": "Adorable Pets",
+  "description": "A feed featuring cute and adorable pictures of pets without any bad language or vulgarity.",
+  "blueprint": {
+    "topics": [
+      { "name": "pets", "priority": 1 },
+      { "name": "dogs", "priority": 0.9 },
+      { "name": "cats", "priority": 0.9 },
+      { "name": "puppies", "priority": 0.8 },
+      { "name": "kittens", "priority": 0.8 }
+    ],
+    "filters": {
+      "limit_posts_about": [
+        "bad language",
+        "vulgarity",
+        "profanity",
+        "offensive content"
+      ]
+    },
+    "ranking_weights": {
+      "focused": 0.8,
+      "fresh": 0.7,
+      "balanced": 0.6,
+      "trending": 0.5
+    },
+    "suggested_accounts": [
+      "did:plc:t4q27bc5gswob4zskgcqi4b6",
+      "did:plc:pk5nq3gedpdb6xedfeobsm52",
+      "did:plc:f4d76fjna5nxqsy2fu6cgmp3",
+      "did:plc:gyjeilekf6276652rhhvjs5c",
+      "did:plc:xrr5j2okn7ew2zvcwsxus3gb",
+      "did:plc:2ho7jhe6opdnsptcxjmrwca2",
+      "did:plc:hh7jwr3vgpojfulwekw36zms",
+      "did:plc:kptddmrndbfzof3yzmhdg3fq",
+      "did:plc:fvzkql2aqtbk7qmqjkoo2lv2"
+    ]
+  },
+  "timestamp": 1763270109926
 }
 ```
 
-- `handle` / `password` — login credentials for the ATProto account that will own the feed.
-- `hostname` — the domain for your feed (`did:web` format).
-- `record_name` — unique key for this feed record.
-- `display_name` / `description` / `avatar_path` — optional metadata for the feed.
+---
 
-### Response Example
-
-```json
-{
-  "uri": "at://did:web:feeds.princetonhci.social/app.bsky.feed.generator/feeds-test3"
-}
-```
-
-- The feed URI is returned and automatically added to your **`algos` registry**, making it immediately available via the server.
-
-### How It Works
-
-1. `create_feed_endpoint()` receives the POST request.
-2. Calls `create_feed(**data)` to interact with the ATProto API.
-3. Saves the feed record in **SQLite** via `Feed.create()`.
-4. Dynamically adds the handler for this feed using `make_handler(uri)`.
-5. No server restart is required — the new feed is live immediately.
-
-### Example cURL
+## **Example cURL Command**
 
 ```bash
 curl -X POST https://feeds.princetonhci.social/create_feed \
   -H "Content-Type: application/json" \
   -d '{
-        "handle": "princetonhci.social",
-        "password": "<example password>",
-        "hostname": "feeds.princetonhci.social",
-        "record_name": "demo-custom-feed",
-        "display_name": "Demo Custom Feed",
-        "description": "An example of a custom feed"
-      }'
+    "handle": "<your bluesky handle>",
+    "password": "<the app password for the said handle>",
+    "hostname": "feeds.princetonhci.social",
+    "record_name": "adorable-pets-feed",
+    "display_name": "Adorable Pets",
+    "description": "A feed featuring cute and adorable pictures of pets without any bad language or vulgarity.",
+    "blueprint": {
+      "topics": [
+        { "name": "pets", "priority": 1 },
+        { "name": "dogs", "priority": 0.9 },
+        { "name": "cats", "priority": 0.9 },
+        { "name": "puppies", "priority": 0.8 },
+        { "name": "kittens", "priority": 0.8 }
+      ],
+      "filters": {
+        "limit_posts_about": [
+          "bad language",
+          "vulgarity",
+          "profanity",
+          "offensive content"
+        ]
+      },
+      "ranking_weights": {
+        "focused": 0.8,
+        "fresh": 0.7,
+        "balanced": 0.6,
+        "trending": 0.5
+      },
+      "suggested_accounts": [
+        "did:plc:t4q27bc5gswob4zskgcqi4b6",
+        "did:plc:pk5nq3gedpdb6xedfeobsm52",
+        "did:plc:f4d76fjna5nxqsy2fu6cgmp3",
+        "did:plc:gyjeilekf6276652rhhvjs5c",
+        "did:plc:xrr5j2okn7ew2zvcwsxus3gb",
+        "did:plc:2ho7jhe6opdnsptcxjmrwca2",
+        "did:plc:hh7jwr3vgpojfulwekw36zms",
+        "did:plc:kptddmrndbfzof3yzmhdg3fq",
+        "did:plc:fvzkql2aqtbk7qmqjkoo2lv2"
+      ]
+    },
+    "timestamp": 1763270109926
+  }'
 ```
+
+---
+
+## **Example Response**
+
+If successful, the server returns the feed URI:
+
+```json
+{
+  "uri": "at://did:web:feeds.princetonhci.social/app.bsky.feed.generator/adorable-pets-feed"
+}
+```
+
+You can now:
+
+- Add this feed to Bluesky as a custom algorithm
+- Share the feed URL publicly
+- Immediately start seeing ranked posts pulled using your blueprint
+
+---

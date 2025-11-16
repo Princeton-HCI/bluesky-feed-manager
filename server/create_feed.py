@@ -6,7 +6,7 @@ import os
 
 def create_feed(handle, password, hostname, record_name, display_name='', description='',
                 avatar_path=os.path.join(os.path.dirname(__file__), "avatar.png"),
-                feed_blueprint=None):
+                blueprint=None):
     client = Client()
     client.login(handle, password)
 
@@ -17,6 +17,7 @@ def create_feed(handle, password, hostname, record_name, display_name='', descri
         with open(avatar_path, 'rb') as f:
             avatar_blob = client.upload_blob(f.read()).blob
 
+    # Create or update record on Bluesky
     response = client.com.atproto.repo.put_record(
         models.ComAtprotoRepoPutRecord.Data(
             repo=client.me.did,
@@ -36,7 +37,7 @@ def create_feed(handle, password, hostname, record_name, display_name='', descri
 
     feed_uri = response.uri
 
-    # Save feed to DB, update if it already exists
+    # Save feed metadata locally
     data = {
         "handle": handle,
         "record_name": record_name,
@@ -51,7 +52,6 @@ def create_feed(handle, password, hostname, record_name, display_name='', descri
     )
 
     if not created:
-        # Update missing fields
         updated = False
         for field in ["handle", "record_name", "display_name", "description", "avatar_path"]:
             value = data.get(field)
@@ -62,24 +62,38 @@ def create_feed(handle, password, hostname, record_name, display_name='', descri
             feed.save()
 
     # Feed blueprint processing
-    if feed_blueprint:
+    if blueprint:
         # Delete old sources for this feed
         FeedSource.delete().where(FeedSource.feed == feed).execute()
 
-        # Add suggested accounts
-        for account_did in feed_blueprint['ruleset'].get('suggested_accounts', []):
+        # Preferences (positive)
+        for topic in blueprint.get('topics', []):
             FeedSource.create(
                 feed=feed,
-                source_type='account',
+                source_type='topic_preference',
+                identifier=topic['name']
+            )
+        for account_did in blueprint.get('suggested_accounts', []):
+            FeedSource.create(
+                feed=feed,
+                source_type='account_preference',
                 identifier=account_did
             )
 
-        # Add topics
-        for topic in feed_blueprint['ruleset'].get('topics', []):
+        # Filters (negative)
+        filters = blueprint.get("filters", {})
+
+        for keyword in filters.get("limit_posts_about", []):
             FeedSource.create(
                 feed=feed,
-                source_type='topic',
-                identifier=topic['name']
+                source_type='topic_filter',
+                identifier=keyword
+            )
+        for blocked_did in filters.get("limit_posts_from", []):
+            FeedSource.create(
+                feed=feed,
+                source_type='account_filter',
+                identifier=blocked_did
             )
 
     # Dynamically add handler to algos
