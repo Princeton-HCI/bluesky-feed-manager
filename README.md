@@ -6,7 +6,7 @@ This guide walks through deploying your ATProto feed generator on a VM with NGIN
 
 ## 1. VM & Network Setup
 
-To run your Bluesky Feed Manager, you’ll need a small Linux VM with a static external IP, DNS pointing to it, and firewall rules allowing web traffic. Below is a recommended setup based on a working configuration deployed on Google Cloud Platform (GCP), though the same approach works on AWS, Azure, DigitalOcean, etc.
+To run your Bluesky feed manager, you’ll need a small Linux VM with a static external IP, DNS pointing to it, and firewall rules allowing web traffic. Below is a recommended setup based on a working configuration deployed on Google Cloud Platform (GCP), though the same approach works on AWS, Azure, DigitalOcean, etc.
 
 ---
 
@@ -59,7 +59,7 @@ Example DNS records (safe placeholder values):
 
 | Type | Name    | Data (IP)        | Meaning                               |
 | ---- | ------- | ---------------- | ------------------------------------- |
-| A    | `feeds` | **203.0.113.45** | `feeds.example.com` → Feed Manager VM |
+| A    | `feeds` | **203.0.113.45** | `feeds.example.com` → feed manager VM |
 
 For example:
 
@@ -156,7 +156,7 @@ First, make the server script executable:
 chmod +x run_server.sh
 ```
 
-Then start the Bluesky Feed Manager service:
+Then start the Bluesky feed manager service:
 
 ```bash
 ./run_server.sh start
@@ -185,6 +185,14 @@ uvicorn server.app:app --host 0.0.0.0 --port 8000 --reload
 ---
 
 ## 6. Configure NGINX & SSL
+
+Now that your server is running and your domain points to your VM’s external IP, you can configure NGINX to handle HTTPS and proxy traffic to the feed manager.
+
+1. Exit out of which working directory you are currently in
+
+```bash
+cd ~
+```
 
 2. Create NGINX site configuration:
 
@@ -236,15 +244,6 @@ sudo certbot --nginx -d feeds.princetonhci.social
 
 ---
 
-Below is a clean, rewritten **Step 7** that replaces your original Step 11.
-It focuses on **trying the service**, **deploying a new custom feed**, and includes the **updated request body shape**.
-
----
-
-Here is the updated Step 7 with clear instructions about the required **API key header**, written cleanly so you can drop it directly into your README.
-
----
-
 ## 7. Test the Service: Deploy a New Custom Feed (Dynamic Feed Creation)
 
 Once your server is running and NGINX/SSL is configured, you can **create new custom feeds dynamically**—without editing code or restarting the service. This step verifies that your deployment works end-to-end.
@@ -263,7 +262,7 @@ x-api-key: <your API key>
 > All requests to this endpoint must include your API key in the `x-api-key` header.
 > This key is the same one you configured in your `.env` file under `API_KEY`.
 
-Your Feed Manager will automatically:
+Your feed manager will automatically:
 
 1. Authenticate with the ATProto account you provide
 2. Publish a new feed generator record
@@ -388,10 +387,12 @@ If successful, the server returns the feed URI:
 }
 ```
 
-You can now:
+**Congratulations! 🎉 Your service is now creating fully dynamic, on-demand Bluesky feeds.**
 
-- Add this feed to Bluesky as a custom algorithm
-- Share the feed URL publicly
-- Immediately begin seeing ranked posts generated from your blueprint
+With a single API call, you can:
 
----
+- Instantly publish a new custom feed to Bluesky
+- Share its URL with anyone
+- See it start ranking posts immediately based on your blueprint
+
+No code changes. No redeploys. Fully dynamic.
