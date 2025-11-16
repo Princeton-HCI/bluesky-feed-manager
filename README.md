@@ -327,7 +327,7 @@ Here is an example of the JSON body you would POST to this service:
 ### Example cURL Command (with API key)
 
 ```bash
-curl -X POST https://feeds.example.com/create_feed \
+curl -X POST https://feeds.example.com:8000/manage-feed \
   -H "Content-Type: application/json" \
   -H "x-api-key: <your api key>" \
   -d '{
