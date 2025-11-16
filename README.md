@@ -101,7 +101,7 @@ SSH into your VM and run:
 
 ```bash
 sudo apt update
-sudo apt install nginx certbot python3-certbot-nginx -y
+sudo apt install uvicorn nginx certbot python3-certbot-nginx python3-pip -y
 sudo pip3 install --upgrade --force-reinstall --ignore-installed \
     python-dotenv \
     atproto \
