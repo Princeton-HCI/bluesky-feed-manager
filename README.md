@@ -6,11 +6,92 @@ This guide walks through deploying your ATProto feed generator on a VM with NGIN
 
 ## 1. VM & Network Setup
 
-1. **Create VM** (Ubuntu 22+ recommended)
-2. **Assign a new external IP**
-3. **Point your feeds subdomain** to the VM’s external IP
+To run your Bluesky Feed Manager, you’ll need a small Linux VM with a static external IP, DNS pointing to it, and firewall rules allowing web traffic. Below is a recommended setup based on a working configuration deployed on Google Cloud Platform (GCP), though the same approach works on AWS, Azure, DigitalOcean, etc.
 
-Example: `feeds.princetonhci.social → <external IP>`
+---
+
+### 1.1 Create a VM Instance
+
+Choose any cloud provider and create a lightweight virtual machine.
+
+**Recommended VM configuration (example using GCP):**
+
+| Setting                           | Recommended Value                                                     |
+| --------------------------------- | --------------------------------------------------------------------- |
+| **Name**                          | `bluesky-feed-manager`                                                |
+| **Region / Zone**                 | e.g., `us-central1-f`                                                 |
+| **Machine Type**                  | `e2-micro` (2 vCPUs, 1 GB RAM) — works well and is free-tier eligible |
+| **Boot Disk**                     | Ubuntu **22.04** LTS or Ubuntu **24.04** LTS                          |
+| **Disk Size**                     | ~10 GB                                                                |
+| **External IP**                   | Static or Ephemeral (Static preferred)                                |
+| **Firewall (during VM creation)** | ✔ Allow HTTP, ✔ Allow HTTPS                                           |
+
+This kind of configuration is sufficient for running a Feed Generator service in production.
+
+Once created, your VM will receive:
+
+- An **internal IP** (e.g., `10.128.0.3`)
+- An **external IPv4** (e.g., `203.0.113.45`)
+
+You will use the external IP when configuring DNS.
+
+---
+
+### 1.2 Reserve or Assign an External IP
+
+If possible, reserve a **static** external IP so your feed hostname does not change.
+
+Example (placeholder):
+
+```
+External IP (static): 203.0.113.45
+```
+
+Attach this IP to the VM’s primary network interface.
+
+---
+
+### 1.3 Configure DNS for Your Feed Subdomain
+
+In your DNS provider (e.g., GoDaddy, Cloudflare, Namecheap), create an **A record** that points your feed domain to your VM’s external IP.
+
+Example DNS records (safe placeholder values):
+
+| Type | Name    | Data (IP)        | Meaning                               |
+| ---- | ------- | ---------------- | ------------------------------------- |
+| A    | `feeds` | **203.0.113.45** | `feeds.example.com` → Feed Manager VM |
+
+For example:
+
+```
+feeds.example.com → 203.0.113.45
+```
+
+This domain will later be used as your `HOSTNAME` and for your SSL certificate.
+
+---
+
+### 1.4 Create Firewall Rules (Provider Example: GCP)
+
+Your VM must receive inbound traffic on these ports:
+
+| Purpose                    | Port |
+| -------------------------- | ---- |
+| HTTP (NGINX)               | 80   |
+| HTTPS (NGINX + Certbot)    | 443  |
+| App Server / API (Uvicorn) | 8000 |
+
+Create an ingress firewall rule:
+
+```
+Name: allow-web
+Direction: Ingress
+Source IP Range: 0.0.0.0/0
+Allowed Protocols: tcp:80, tcp:443, tcp:8000
+Target: All instances (or apply a network tag)
+```
+
+If your cloud provider automatically adds `allow-http` and `allow-https`, you only need to add `tcp:8000`.
 
 ---
 
@@ -64,12 +145,6 @@ nano .env
 - Any optional variables your project requires
 
 Save and exit when done.
-
----
-
-## 5. Run the Server
-
-Here is a clean rewritten **Step 5** based on your instructions:
 
 ---
 
@@ -166,40 +241,47 @@ It focuses on **trying the service**, **deploying a new custom feed**, and inclu
 
 ---
 
-# **7. Test the Service: Deploy a New Custom Feed (Dynamic Feed Creation)**
-
-Once your server is running and NGINX/SSL is configured, you can **create new custom feeds dynamically**—without editing code or restarting the service.
-
-This step confirms that your deployment works end-to-end.
+Here is the updated Step 7 with clear instructions about the required **API key header**, written cleanly so you can drop it directly into your README.
 
 ---
 
-## **Endpoint**
+## 7. Test the Service: Deploy a New Custom Feed (Dynamic Feed Creation)
+
+Once your server is running and NGINX/SSL is configured, you can **create new custom feeds dynamically**—without editing code or restarting the service. This step verifies that your deployment works end-to-end.
+
+---
+
+### Endpoint
 
 ```
 POST /create_feed
 Content-Type: application/json
+x-api-key: <your API key>
 ```
+
+> Important:
+> All requests to this endpoint must include your API key in the `x-api-key` header.
+> This key is the same one you configured in your `.env` file under `API_KEY`.
 
 Your Feed Manager will automatically:
 
 1. Authenticate with the ATProto account you provide
 2. Publish a new feed generator record
-3. Store the feed in SQLite
+3. Transiently store the feed in SQLite
 4. Register it dynamically so it’s instantly live
-5. Serve the feed from your hostname (e.g., `https://feeds.princetonhci.social`)
+5. Serve the feed immediately from your hostname (e.g., `https://feeds.example.com`)
 
 ---
 
-## **Updated Request Shape**
+### Example Request Body
 
-Here is the **new full JSON structure** your API expects, including the `ruleset_id`, `blueprint`, and feed-specific metadata:
+Here is an example of the JSON body you would POST to this service:
 
 ```json
 {
   "handle": "<your bluesky handle>",
   "password": "<the app password for the said handle>",
-  "hostname": "feeds.princetonhci.social",
+  "hostname": "feeds.example.com",
   "record_name": "adorable-pets-feed",
   "display_name": "Adorable Pets",
   "description": "A feed featuring cute and adorable pictures of pets without any bad language or vulgarity.",
@@ -243,15 +325,16 @@ Here is the **new full JSON structure** your API expects, including the `ruleset
 
 ---
 
-## **Example cURL Command**
+### Example cURL Command (with API key)
 
 ```bash
-curl -X POST https://feeds.princetonhci.social/create_feed \
+curl -X POST https://feeds.example.com/create_feed \
   -H "Content-Type: application/json" \
+  -H "x-api-key: <your api key>" \
   -d '{
     "handle": "<your bluesky handle>",
     "password": "<the app password for the said handle>",
-    "hostname": "feeds.princetonhci.social",
+    "hostname": "feeds.example.com",
     "record_name": "adorable-pets-feed",
     "display_name": "Adorable Pets",
     "description": "A feed featuring cute and adorable pictures of pets without any bad language or vulgarity.",
@@ -295,13 +378,13 @@ curl -X POST https://feeds.princetonhci.social/create_feed \
 
 ---
 
-## **Example Response**
+### Example Response
 
 If successful, the server returns the feed URI:
 
 ```json
 {
-  "uri": "at://did:web:feeds.princetonhci.social/app.bsky.feed.generator/adorable-pets-feed"
+  "uri": "at://did:web:feeds.example.com/app.bsky.feed.generator/adorable-pets-feed"
 }
 ```
 
@@ -309,6 +392,6 @@ You can now:
 
 - Add this feed to Bluesky as a custom algorithm
 - Share the feed URL publicly
-- Immediately start seeing ranked posts pulled using your blueprint
+- Immediately begin seeing ranked posts generated from your blueprint
 
 ---
