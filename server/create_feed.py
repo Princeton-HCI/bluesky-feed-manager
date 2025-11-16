@@ -4,9 +4,9 @@ from server.algos import algos
 from server.algos.feed import make_handler
 import os
 
-def create_feed(handle, password, hostname, record_name, display_name='', description='',
+def create_feed(handle, password, hostname, record_name, display_name="", description="",
                 avatar_path=os.path.join(os.path.dirname(__file__), "avatar.png"),
-                blueprint=None):
+                blueprint=None, ruleset_id="", timestamp=0):
     client = Client()
     client.login(handle, password)
 
